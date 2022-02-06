@@ -1,0 +1,499 @@
+---
+title: "TargetJump Fit (Diff Param for Diff Clamp Size)"
+output: html_notebook
+---
+
+Load in Libraries
+```{r}
+
+rm(list = ls())
+source("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/TargetJumpModels.R")
+
+# define ggplot theme 
+call_aesthethics <- function(text_size){
+  
+  th <- theme(   panel.grid.major = element_blank(),
+                 panel.grid.minor = element_blank(),
+                 panel.border = element_blank(),
+                 panel.background = element_blank(),
+                 axis.line = element_line(size = 0.5), 
+                 legend.position = 'right', 
+                 legend.text = element_text(size= text_size, family="Helvetica"),
+                 text = element_text(size= text_size, family="Helvetica"), 
+                 strip.text.x = element_text(size = rel(0.90)), 
+                 strip.text.y = element_text(size = rel(0.90)), 
+                 axis.title.x = element_text(vjust=-0.3), 
+                 plot.title = element_text(hjust = 0.5, vjust = 0), 
+                 axis.ticks = element_line(size = 0.4), 
+                 axis.text.x.bottom  = element_text(size = rel(0.90), margin = unit(c(t = 2.5, r = 0, b = 0, l = 0), "mm")),
+                 axis.title.y = element_text(vjust = 1),
+                 axis.text.y = element_text(size = rel(0.90), margin = unit(c(t = 0, r = 2.5, b = 0, l = 0), "mm")),
+                 axis.ticks.length = unit(-1.2, "mm"),
+                 axis.text.x.top = element_text(size = rel(0.90), margin = unit(c(t = 0, r = 0, b = 2.5, l = 0), "mm")))
+  
+  return(th)
+}
+
+':=' <- function(lhs, rhs) {
+  frame <- parent.frame()
+  lhs <- as.list(substitute(lhs))
+  if (length(lhs) > 1)
+    lhs <- lhs[-1]
+  if (length(lhs) == 1) {
+    do.call(`=`, list(lhs[[1]], rhs), envir=frame)
+    return(invisible(NULL)) 
+  }
+  if (is.function(rhs) || is(rhs, 'formula'))
+    rhs <- list(rhs)
+  if (length(lhs) > length(rhs))
+    rhs <- c(rhs, rep(list(NULL), length(lhs) - length(rhs)))
+  for (i in 1:length(lhs))
+    do.call(`=`, list(lhs[[i]], rhs[[i]]), envir=frame)
+  return(invisible(NULL)) 
+}
+
+data_summary_med <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = median(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func,
+                  varname)
+  data_sum <- rename(data_sum, c("mean" = varname))
+  return(data_sum)
+}
+
+data_summary <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func,
+                  varname)
+  data_sum <- rename(data_sum, c("mean" = varname))
+  return(data_sum)
+}
+
+library(tidyverse)
+library(lemon)
+library(pracma)
+library(plotrix)
+
+text_size <- 18
+th <- call_aesthethics(text_size)
+my.colors2 <-  c("#006600", "#800080", "#FF9900", 'deepskyblue4')
+```
+
+Load Data
+```{r}
+
+my_comb_data <- read.csv('~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/parajump_5Feb2022.csv', header = TRUE, sep = ',') %>%
+  filter(abs(clamp_size) > 0) %>%
+  mutate(Hand_Diff_Flip = ifelse(clamp_size > 0, -Hand_Diff, Hand_Diff ), 
+         tgtjump_Flip = ifelse(clamp_size > 0, -tgt_jump_size, tgt_jump_size), 
+         clamp_size = abs(clamp_size)) %>%
+  group_by(SN, Exp, clamp_size, tgtjump_Flip) %>%
+  dplyr::summarise(Handgrp = median(Hand_Diff_Flip, na.rm = TRUE) ) 
+
+
+```
+
+Plot All functions
+```{r}
+
+my_comb_data %>%
+  ggplot(aes(x = tgtjump_Flip, y = Handgrp, group = factor(clamp_size), color = factor(clamp_size) )) + 
+  annotate(alpha = 0.8, 'segment', x = c(0,-30), xend = c(0, 30), y = c(-0.5, 0), yend = c(3, 0), linetype = 'dashed', color = rep('grey', 2)) +
+  #geom_smooth(se = FALSE, size = 1, span = 1.5) + 
+  stat_summary(fun.data = 'mean_se', geom = 'pointrange', size = 0.3, alpha = 1) +
+  #stat_summary(fun.y = 'mean', geom = 'line', size = 0.35) +
+ # labs(x = '', y = expression(paste(Delta, " Hand Angle (°)")), color = '') + 
+  scale_x_continuous(breaks = unique(my_comb_data$tgtjump_Flip)) + 
+  scale_color_manual(values = c(my.colors2[c(3, 4, 1, 2)], 'black' )) + 
+  scale_y_continuous(breaks = seq(-0.5, 3, 0.5)) +
+  coord_capped_cart(bottom = 'both', left = 'both', ylim = c(-0.5, 2) ) +
+  th + theme(axis.text.x = element_text(angle = 90, hjust = 0.95, vjust = 0.3)) 
+
+```
+
+
+Load Functions
+```{r}
+
+c(SPEinvariantNoTE, SPEinvariantLinearTE, SPEinvariantSinTE, SPEinvariantSatTE,
+  SPERewardNoTE, SPERewardLinearTE, SPERewardSinTE, SPERewardSatTE, 
+  SPEdisruptNoTe, SPEdisruptTElinear, SPEdisruptSinTE, SPEdisruptTESat, 
+  SPEinvariantNoTE, SPEinvariantLinearTE, SPEinvariantSinTE, SPEinvariantSatTE, 
+  signaldepnoise) := call_tj_models()
+
+```
+
+
+Setting up model fit (average data)
+```{r}
+
+# model comparison table
+num.mod <- 13
+ini_runs <- 10
+counter <- 0
+num.iter <- 1
+num.folds <- 1
+my_comp_headers <- c('iter', 'fold', 'SPEtype',"modname", "ssefun", "parambounds", "paramnames", "numparam", 'fitparam', 'modAIC', 'modR2', 'modSSE', "CVmodSSE", 'nullSSE', 'Numdata', 'testSN', 'trainSN')
+
+my_compile_mod <- setNames(as.data.frame(matrix(NA, ncol = length(my_comp_headers), nrow = num.mod * num.iter * num.folds)), my_comp_headers)
+my_compile_mod$modSSE <- Inf
+totallen <- nrow(my_compile_mod)
+my_fit_data <- my_comb_data %>% filter(SN == 1) #place holder
+myunique_SN <- unique( my_comb_data$SN ) 
+bootstrap <- 1
+
+for(si in 1:num.iter){
+
+  #Randomly shuffle the data
+  my_SN <- randperm(myunique_SN, length(myunique_SN))
+  
+  #Create equally size folds
+  if(num.folds == 1){
+    folds <- rep(1, length(myunique_SN))
+  }else{
+    folds <- cut(seq(1,length(myunique_SN)),breaks=num.folds,labels=FALSE)
+  }
+  
+  for(fi in 1:num.folds){
+    
+    whichrow <- seq(counter + 1, num.mod * si * num.folds, 1)
+    testIndexes <- which(folds==fi,arr.ind=TRUE)
+
+    if(num.folds == 1 & bootstrap == 0){
+      testData <- my_SN[testIndexes]
+      trainData <- my_SN[testIndexes]
+    }else if (num.folds == 1 & bootstrap == 1){
+      boostrapSN <- sample(myunique_SN, length(myunique_SN), replace = TRUE)
+      testData <- boostrapSN
+      trainData <- boostrapSN
+      
+    }else{
+      testData <- my_SN[testIndexes]
+      trainData <- my_SN[-testIndexes]
+    }
+    
+    for(mi in 1:length(whichrow)){
+      my_compile_mod$trainSN[whichrow[mi]] <- list ( trainData ) 
+      my_compile_mod$testSN[whichrow[mi]] <-  list ( testData )
+    }
+    
+    
+    my_compile_mod$iter[whichrow] <- si
+    my_compile_mod$fold[whichrow] <- fi
+    
+    SPEinvariantNoTE.sse <- function(params){
+      return(  sum ( ( my_fit_data$Handgrp - SPEinvariantNoTE(unique(my_fit_data$clamp_size), unique(my_fit_data$tgtjump_Flip), my_fit_data$Handgrp[my_fit_data$tgtjump_Flip == 0], params[1], params[2], 0)   )^2 ) )
+    }
+    
+    SPEinvariantLinearTE.sse <- function(params){
+      return(  sum ( ( my_fit_data$Handgrp - SPEinvariantLinearTE(unique(my_fit_data$clamp_size), unique(my_fit_data$tgtjump_Flip), my_fit_data$Handgrp[my_fit_data$tgtjump_Flip == 0], params[1], params[2], 0 )   )^2 ) )
+    }
+    
+    SPErewardNoTE.sse <- function(params){
+      return(  sum ( ( my_fit_data$Handgrp - SPERewardNoTE(unique(my_fit_data$clamp_size), unique(my_fit_data$tgtjump_Flip), my_fit_data$Handgrp[my_fit_data$tgtjump_Flip == 0], params[1], params[2], 0 )   )^2 ) )
+    }
+    
+    SPErewardLinearTE.sse <- function(params){
+      return(  sum ( ( my_fit_data$Handgrp - SPERewardLinearTE(unique(my_fit_data$clamp_size), unique(my_fit_data$tgtjump_Flip), my_fit_data$Handgrp[my_fit_data$tgtjump_Flip == 0], params[1], params[2], params[3], 0 )   )^2 ) )
+    }
+    
+    SPEdisruptNoTE.sse <- function(params){
+      return(  sum ( ( my_fit_data$Handgrp - SPEdisruptNoTe(unique(my_fit_data$clamp_size), unique(my_fit_data$tgtjump_Flip),  my_fit_data$Handgrp[my_fit_data$tgtjump_Flip == 0], params[1], params[2], 0 )   )^2 ) )
+    }
+    
+    SPEdisruptTElin.sse <- function(params){
+      return(  sum ( ( my_fit_data$Handgrp - SPEdisruptTElinear(unique(my_fit_data$clamp_size), unique(my_fit_data$tgtjump_Flip), my_fit_data$Handgrp[my_fit_data$tgtjump_Flip == 0], params[1], params[2], params[3], 0 )   )^2 ) )
+    }
+    
+    SPEinvariantSinTE.sse <- function(params){
+      return(  sum ( ( my_fit_data$Handgrp - SPEinvariantSinTE(unique(my_fit_data$clamp_size), unique(my_fit_data$tgtjump_Flip), my_fit_data$Handgrp[my_fit_data$tgtjump_Flip == 0], params[1], params[2], 0)   )^2 ) )
+    }
+    
+    SPErewardSinTE.sse <- function(params){
+      return(  sum ( ( my_fit_data$Handgrp - SPERewardSinTE(unique(my_fit_data$clamp_size), unique(my_fit_data$tgtjump_Flip), my_fit_data$Handgrp[my_fit_data$tgtjump_Flip == 0], params[1], params[2],params[3], 0 )   )^2 ) )
+    }
+    
+    SPEdisruptSinTE.sse <- function(params){
+      return(  sum ( ( my_fit_data$Handgrp - SPEdisruptSinTE(unique(my_fit_data$clamp_size), unique(my_fit_data$tgtjump_Flip), my_fit_data$Handgrp[my_fit_data$tgtjump_Flip == 0], params[1], params[2], params[3], 0 )   )^2 ) )
+    }
+    
+    SPEinvariantSatTE.sse <- function(params){
+      return(  sum ( ( my_fit_data$Handgrp - SPEinvariantSatTE(unique(my_fit_data$clamp_size), unique(my_fit_data$tgtjump_Flip), my_fit_data$Handgrp[my_fit_data$tgtjump_Flip == 0], params[1], params[2], params[3], 0)   )^2 ) )
+    }
+    
+    SPErewardSatTE.sse <- function(params){
+      return(  sum ( ( my_fit_data$Handgrp - SPERewardSatTE(unique(my_fit_data$clamp_size), unique(my_fit_data$tgtjump_Flip), my_fit_data$Handgrp[my_fit_data$tgtjump_Flip == 0], params[1], params[2], params[3], params[4], 0 )   )^2 ) )
+    }
+    
+    SPEdisruptSatTE.sse <- function(params){
+      return(  sum ( ( my_fit_data$Handgrp - SPEdisruptTESat(unique(my_fit_data$clamp_size), unique(my_fit_data$tgtjump_Flip), my_fit_data$Handgrp[my_fit_data$tgtjump_Flip == 0], params[1], params[2], params[3], params[4], 0 )   )^2 ) )
+    }
+    
+    SignalDepend.sse <- function(params){
+      return(  sum ( ( my_fit_data$Handgrp - signaldepnoise(unique(my_fit_data$clamp_size), unique(my_fit_data$tgtjump_Flip), params[1], params[2], params[3], 0 ))^2 ) )
+    }
+    
+    my_compile_mod$ssefun[counter + 1] <- list(SPEinvariantNoTE.sse)
+    my_compile_mod$ssefun[counter + 2] <- list(SPEinvariantLinearTE.sse)
+    my_compile_mod$ssefun[counter + 3] <- list(SPErewardNoTE.sse)
+    my_compile_mod$ssefun[counter + 4] <- list(SPErewardLinearTE.sse)
+    my_compile_mod$ssefun[counter + 5] <- list(SPEdisruptNoTE.sse)
+    my_compile_mod$ssefun[counter + 6] <- list(SPEdisruptTElin.sse)
+    my_compile_mod$ssefun[counter + 7] <- list(SPEinvariantSinTE.sse)
+    my_compile_mod$ssefun[counter + 8] <- list(SPErewardSinTE.sse)
+    my_compile_mod$ssefun[counter + 9] <- list(SPEdisruptSinTE.sse)
+    my_compile_mod$ssefun[counter + 10] <- list(SPEinvariantSatTE.sse)
+    my_compile_mod$ssefun[counter + 11] <- list(SPErewardSatTE.sse)
+    my_compile_mod$ssefun[counter + 12] <- list(SPEdisruptSatTE.sse)
+    my_compile_mod$ssefun[counter + 13] <- list(SignalDepend.sse)
+    
+    # SPE Invariant No TE
+    my_compile_mod$paramnames[counter + 1] <- list ( c("my_intercept", "my_slope") )
+    my_compile_mod$parambounds[counter + 1] <- list( setNames(as.data.frame(matrix(NaN, ncol = length(my_compile_mod$paramnames[[1]]), nrow = 2)), my_compile_mod$paramnames[[1]]) )
+    my_compile_mod$parambounds[counter + 1][[1]][1, ] <- c(40, 1e-5) # upper
+    my_compile_mod$parambounds[counter + 1][[1]][2, ] <- c(1e-5, 1e-5) # upper
+    my_compile_mod$SPEtype[counter + 1] <- 'Invariant SPE'
+    my_compile_mod$modname[counter + 1] <- 'No TE'
+    my_compile_mod$numparam[counter + 1] <- 0
+    
+    # SPE Invariant Linear TE
+    my_compile_mod$SPEtype[counter + 2] <- 'Invariant SPE'
+    my_compile_mod$modname[counter + 2] <- 'Linear TE'
+    my_compile_mod$paramnames[counter + 2] <- list ( c("my_intercept", "my_slope") )
+    my_compile_mod$parambounds[counter + 2] <- list( setNames(as.data.frame(matrix(NaN, ncol = length(my_compile_mod$paramnames[[2]]), nrow = 2)), my_compile_mod$paramnames[[2]]) )
+    my_compile_mod$parambounds[counter + 2][[1]][1, ] <- c(40, 1e-5) # upper
+    my_compile_mod$parambounds[counter + 2][[1]][2, ]  <- c(1e-5, 1e-5) # lower 
+    my_compile_mod$numparam[counter + 2] <- 1
+    
+    # SPE Reward No TE
+    my_compile_mod$SPEtype[counter + 3] <- 'Rewarded SPE'
+    my_compile_mod$modname[counter + 3]  <- 'No TE'
+    my_compile_mod$paramnames[counter + 3]  <- list ( c("my_reward_amp", "my_sd") )
+    my_compile_mod$parambounds[counter + 3]  <- list( setNames(as.data.frame(matrix(NaN, ncol = length(my_compile_mod$paramnames[[3]]), nrow = 2)), my_compile_mod$paramnames[[3]]) )
+    my_compile_mod$parambounds[counter + 3] [[1]][1, ] <- c(40, 1000) # upper
+    my_compile_mod$parambounds[counter + 3] [[1]][2, ] <- c(1e-5, 1e-5) # lower 
+    my_compile_mod$numparam[counter + 3]  <- 2
+    
+    # SPE Reward Linear TE
+    my_compile_mod$SPEtype[counter + 4] <- 'Rewarded SPE'
+    my_compile_mod$modname[counter + 4] <- 'Linear TE'
+    my_compile_mod$paramnames[counter + 4] <- list ( c("my_reward_amp", "my_slope", "my_sd") )
+    my_compile_mod$parambounds[counter + 4] <- list( setNames(as.data.frame(matrix(NaN, ncol = length(my_compile_mod$paramnames[[4]]), nrow = 2)), my_compile_mod$paramnames[[4]]) )
+    my_compile_mod$parambounds[counter + 4][[1]][1, ] <- c(40, 40, 1000) # upper
+    my_compile_mod$parambounds[counter + 4][[1]][2, ] <- c(1e-5, 1e-5, 1e-5) # lower 
+    my_compile_mod$numparam[counter + 4] <- 3
+    
+    # SPE Disrupt No TE
+    my_compile_mod$SPEtype[counter + 5] <- 'Distracted SPE'
+    my_compile_mod$modname[counter + 5] <- 'No TE'
+    my_compile_mod$paramnames[counter + 5] <- list ( c("my_sd", "my_jump_cost") )
+    my_compile_mod$parambounds[counter + 5] <- list( setNames(as.data.frame(matrix(NaN, ncol = length(my_compile_mod$paramnames[[5]]), nrow = 2)), my_compile_mod$paramnames[[5]]) )
+    my_compile_mod$parambounds[counter + 5][[1]][1, ] <- c(40, 1) # upper
+    my_compile_mod$parambounds[counter + 5][[1]][2, ] <- c(1e-5, 1e-5) # lower 
+    my_compile_mod$numparam[counter + 5] <- 2
+    
+    # SPE Disrupt TE linear
+    my_compile_mod$SPEtype[counter + 6] <- 'Distracted SPE'
+    my_compile_mod$modname[counter + 6]  <- 'Linear TE'
+    my_compile_mod$paramnames[counter + 6]  <- list ( c( "my_sd", "my_slope", "my_jump_cost") )
+    my_compile_mod$parambounds[counter + 6]  <- list( setNames(as.data.frame(matrix(NaN, ncol = length(my_compile_mod$paramnames[[6]]), nrow = 2)), my_compile_mod$paramnames[[6]]) )
+    my_compile_mod$parambounds[counter + 6] [[1]][1, ] <- c(100, 40, 1) # upper
+    my_compile_mod$parambounds[counter + 6] [[1]][2, ] <- c(1e-5, 1e-5, 1e-5) # lower 
+    my_compile_mod$numparam[counter + 6]  <- 3
+    
+    # SPE Invariant Sin TE
+    my_compile_mod$SPEtype[counter + 7]  <- 'Invariant SPE'
+    my_compile_mod$modname[counter + 7]  <- 'Distracted TE'
+    my_compile_mod$paramnames[counter + 7]  <- list ( c( "my_slope", "my_sd") )
+    my_compile_mod$parambounds[counter + 7]  <- list( setNames(as.data.frame(matrix(NaN, ncol = length(my_compile_mod$paramnames[[7]]), nrow = 2)), my_compile_mod$paramnames[[7]]) )
+    my_compile_mod$parambounds[counter + 7] [[1]][1, ] <- c(40, 100) # upper
+    my_compile_mod$parambounds[counter + 7] [[1]][2, ] <- c(1e-5, 1e-5) # lower 
+    my_compile_mod$numparam[counter + 7] <- 2
+    
+    # SPE Reward Sin TE
+    my_compile_mod$SPEtype[counter + 8]  <- 'Rewarded SPE'
+    my_compile_mod$modname[counter + 8] <- 'Distracted TE'
+    my_compile_mod$paramnames[counter + 8] <- list ( c("my_reward_amp", "my_slope", "my_sd") )
+    my_compile_mod$parambounds[counter + 8] <- list( setNames(as.data.frame(matrix(NaN, ncol = length(my_compile_mod$paramnames[[8]]), nrow = 2)), my_compile_mod$paramnames[[8]]) )
+    my_compile_mod$parambounds[counter + 8][[1]][1, ] <- c(40, 40, 100) # upper
+    my_compile_mod$parambounds[counter + 8][[1]][2, ] <- c(1e-5, 1e-5, 1e-5) # lower 
+    my_compile_mod$numparam[counter + 8] <- 3
+    
+    # SPE Disrupt TE distract
+    my_compile_mod$SPEtype[counter + 9] <- 'Distracted SPE'
+    my_compile_mod$modname[counter + 9] <- 'Distracted TE'
+    my_compile_mod$paramnames[counter + 9] <- list ( c( "my_sd", "my_slope", "my_jump_cost") )
+    my_compile_mod$parambounds[counter + 9] <- list( setNames(as.data.frame(matrix(NaN, ncol = length(my_compile_mod$paramnames[[9]]), nrow = 2)), my_compile_mod$paramnames[[9]]) )
+    my_compile_mod$parambounds[counter + 9][[1]][1, ] <- c(100, 40, 1) # upper
+    my_compile_mod$parambounds[counter + 9][[1]][2, ] <- c(1e-5, 1e-5, 1e-5) # lower 
+    my_compile_mod$numparam[counter + 9] <- 4
+    
+    # SPE Invariant Sat TE
+    my_compile_mod$SPEtype[counter + 10] <- 'Invariant SPE'
+    my_compile_mod$modname[counter + 10] <- 'Sat TE'
+    my_compile_mod$paramnames[counter + 10] <- list ( c("my_intercept", "my_slope", "my_sat") )
+    my_compile_mod$parambounds[counter + 10] <- list( setNames(as.data.frame(matrix(NaN, ncol = length(my_compile_mod$paramnames[[10]]), nrow = 2)), my_compile_mod$paramnames[[10]]) )
+    my_compile_mod$parambounds[counter + 10][[1]][1, ] <- c(40, 1e-5, 100) # upper
+    my_compile_mod$parambounds[counter + 10][[1]][2, ]  <- c(1e-5, 1e-5, 1e-5) # lower 
+    my_compile_mod$numparam[counter + 10] <- 2
+    
+    # SPE Reward Sat TE
+    my_compile_mod$SPEtype[counter + 11] <- 'Rewarded SPE'
+    my_compile_mod$modname[counter + 11] <- 'Sat TE'
+    my_compile_mod$paramnames[counter + 11] <- list ( c("my_reward_amp", "my_slope", "my_sd", "my_sat") )
+    my_compile_mod$parambounds[counter + 11] <- list( setNames(as.data.frame(matrix(NaN, ncol = length(my_compile_mod$paramnames[[11]]), nrow = 2)), my_compile_mod$paramnames[[11]]) )
+    my_compile_mod$parambounds[counter + 11][[1]][1, ] <- c(40, 40, 100, 100) # upper
+    my_compile_mod$parambounds[counter + 11][[1]][2, ] <- c(1e-5, 1e-5, 1e-5, 1e-5) # lower 
+    my_compile_mod$numparam[counter + 11] <- 4
+    
+    # SPE Disrupt TE Sat
+    my_compile_mod$SPEtype[counter + 12] <- 'Distracted SPE'
+    my_compile_mod$modname[counter + 12]  <- 'Sat TE'
+    my_compile_mod$paramnames[counter + 12]  <- list ( c( "my_sd", "my_slope", "my_jump_cost", "my_sat") )
+    my_compile_mod$parambounds[counter + 12]  <- list( setNames(as.data.frame(matrix(NaN, ncol = length(my_compile_mod$paramnames[[12]]), nrow = 2)), my_compile_mod$paramnames[[12]]) )
+    my_compile_mod$parambounds[counter + 12] [[1]][1, ] <- c(100, 40, 1, 100) # upper
+    my_compile_mod$parambounds[counter + 12] [[1]][2, ] <- c(1e-5, 1e-5, 1e-5, 1e-5) # lower 
+    my_compile_mod$numparam[counter + 12]  <- 4
+    
+    # Signal Dependent Noise
+    my_compile_mod$SPEtype[counter + 13] <- 'Signal SPE'
+    my_compile_mod$modname[counter + 13]  <- 'Signal TE'
+    my_compile_mod$paramnames[counter + 13]  <- list ( c( "te_scale", "spe_scale", 'prior') )
+    my_compile_mod$parambounds[counter + 13]  <- list( setNames(as.data.frame(matrix(NaN, ncol = length(my_compile_mod$paramnames[[13]]), nrow = 2)), my_compile_mod$paramnames[[13]]) )
+    my_compile_mod$parambounds[counter + 13] [[1]][1, ] <- c(80, 80, 80) # upper
+    my_compile_mod$parambounds[counter + 13] [[1]][2, ] <- c(1e-15, 1e-15, 1e-15) # lower 
+    my_compile_mod$numparam[counter + 13] <- 4
+    
+    counter <- counter + num.mod
+  }
+}
+
+```
+
+Loop through model fits
+```{r}
+
+suppressWarnings(
+  
+  for(si in 1:num.iter){
+    for(fi in 1:num.folds){
+      for(mi in 1:num.mod){
+        
+        
+        whichrow <-  (fi - 1) * num.mod + mi + (si - 1) * num.mod * num.folds
+        
+        my_fit_data <- my_comb_data %>% 
+          filter(SN %in% my_compile_mod$trainSN[[whichrow]]) %>%
+          group_by(clamp_size, tgtjump_Flip) %>%
+          dplyr::summarise(Handgrp = mean(Handgrp, na.rm = TRUE))
+        
+        my_test_data <- my_comb_data %>% 
+          filter(SN %in% my_compile_mod$testSN[[whichrow]]) %>%
+          group_by(clamp_size, tgtjump_Flip) %>%
+          dplyr::summarise(Handgrp = mean(Handgrp, na.rm = TRUE))
+        
+        my_param_ini <-  setNames(as.data.frame ( t(replicate(ini_runs, runif( length(my_compile_mod$paramnames[[ whichrow ]]), min= as.numeric(my_compile_mod$parambounds[whichrow][[1]][2, ]), max= as.numeric( my_compile_mod$parambounds[whichrow][[1]][1, ] )))) ), my_compile_mod$paramnames[[ whichrow ]])
+        
+        my.sse.fun <- my_compile_mod$ssefun[[whichrow]]
+        my_param_bounds <- my_compile_mod$parambounds[[whichrow]] 
+        my_param_names <- my_compile_mod$paramnames[[whichrow]] 
+        
+        for ( ini in 1:ini_runs){
+          
+          cmc_param  <-  tryCatch( fmincon(t(as.numeric(my_param_ini[ini, ])), my.sse.fun, lb = as.numeric(my_param_bounds[2, ]), ub = as.numeric(my_param_bounds[1, ]), tol = 1e-12), error = function(c) "error with code")
+          
+          if(is.character(cmc_param) == FALSE){
+            if( cmc_param$value < my_compile_mod$modSSE[whichrow]){
+              my_compile_mod$modSSE[whichrow] <- cmc_param$value
+              my_compile_mod$fitparam[whichrow] <- list ( cmc_param$par )
+            }
+          }
+          
+           
+          my.colmeans <- mean(my_fit_data$Handgrp[my_fit_data$tgtjump_Flip != 0], na.rm = TRUE)
+          my_compile_mod$Numdata[whichrow] <- nrow(my_fit_data[my_fit_data$tgtjump_Flip != 0, ])
+          
+          my_fit_data <- my_test_data # fit with test data
+          my_compile_mod$CVmodSSE[whichrow] <- my.sse.fun(my_compile_mod$fitparam[[whichrow]])
+          
+          if(num.folds == 1){
+            my_compile_mod$nullSSE[whichrow] <- sum((my_fit_data$Handgrp[my_fit_data$tgtjump_Flip != 0 ] - my.colmeans)^2)
+          }else{
+            my_compile_mod$nullSSE[whichrow] <- sum((my_fit_data$Handgrp - my.colmeans)^2)
+          }
+          
+          my_compile_mod$modR2[whichrow] <- 1 -  my_compile_mod$CVmodSSE[whichrow] /  my_compile_mod$nullSSE[whichrow]
+          my_compile_mod$modAIC[whichrow] <- my_compile_mod$Numdata[whichrow] * log(   my_compile_mod$CVmodSSE[whichrow] / ( my_compile_mod$Numdata[whichrow] ) ) +  2 *  ( length(my_param_names) + 1)
+          
+          
+        }
+      }
+    }
+  }
+)
+```
+
+```{r}
+
+my_compile_mod$SPEtype <- factor(my_compile_mod$SPEtype, levels = c('Invariant SPE', 'Rewarded SPE', 'Distracted SPE', 'Signal SPE'))
+my_compile_mod$modname <- factor(my_compile_mod$modname, levels = c('No TE', 'Linear TE', 'Distracted TE', 'Sat TE', 'Signal TE'))
+
+# if doing CV look at this metric 
+my_compile_mod %>%
+  data_summary_med(varname = 'modR2', groupnames = c('iter','SPEtype', 'modname')) %>%
+  data_summary_med(varname = 'modR2', groupnames = c('SPEtype', 'modname')) %>%
+  dplyr::select(SPEtype, modname, modR2) %>%
+  filter(modname %in% c("No TE", "Linear TE"))
+
+my_compile_mod %>%
+  data_summary_med(varname = 'modAIC', groupnames = c('iter','SPEtype', 'modname')) %>%
+  data_summary_med(varname = 'modAIC', groupnames = c('SPEtype', 'modname')) %>%
+  dplyr::select(SPEtype, modname, modAIC) %>%
+  filter(modname %in% c("No TE", "Linear TE"))
+
+```
+
+
+```{r}
+
+my_grp_data <- my_comb_data %>% 
+  group_by(clamp_size, tgtjump_Flip) %>%
+  dplyr::summarise(Hand_mean = mean(Handgrp, na.rm = TRUE), Hand_sem = std.error(Handgrp, na.rm = TRUE))
+
+my_jumpdist_all <- seq(-180, 180, 0.01)
+
+SPEdisruptsinTEl.predict <- SPEdisruptTElinear(unique(my_fit_data$clamp_size), my_jumpdist_all, my_fit_data$Handgrp[my_fit_data$tgtjump_Flip == 0], my_compile_mod$fitparam[[6]][1], my_compile_mod$fitparam[[6]][2], my_compile_mod$fitparam[[6]][3], 1)
+
+combine <- SPEdisruptsinTEl.predict %>%
+  filter(JumpDistance <= 30 & JumpDistance >= -30 & clamp_size %in% c(3, 7, 10, 17)) %>%
+  ggplot(aes(x = JumpDistance, y = DeltaHand)) + 
+  annotate(alpha = 0.4, 'segment', x = c(0,-30), xend = c(0, 30), y = c(-1, 0), yend = c(1.5, 0), linetype = 'dashed', color = rep('grey', 2)) +
+  geom_line(aes(group = factor(clamp_size), color = factor(clamp_size) ), size = 0.5) + 
+  geom_point(aes(x = tgtjump_Flip, y = Hand_mean, color = factor(clamp_size) ), inherit.aes = FALSE, data = my_grp_data[my_grp_data$clamp_size %in% c(3, 7, 10, 17), ], size = 2, position = position_dodge(0)) + 
+  geom_point(aes(x = tgtjump_Flip, y = Hand_mean, color = factor(clamp_size)), inherit.aes = FALSE, data = my_grp_data[my_grp_data$tgtjump_Flip == 0 & my_grp_data$clamp_size %in% c(3, 7, 10, 17), ], size = 5, shape = 10) +
+  geom_errorbar(aes(x = tgtjump_Flip, ymin = Hand_mean - Hand_sem, ymax = Hand_mean + Hand_sem, color = factor(clamp_size) ), inherit.aes = FALSE, data = my_grp_data[my_grp_data$clamp_size %in% c(3, 7, 10, 17), ], width = 2, position = position_dodge(0), alpha = 0.5) + 
+  labs(x = 'Target Jump Size (°)', y = expression(paste(Delta, " Hand Angle (°)")), color = '') + 
+  scale_x_continuous(breaks = my_fit_data$tgtjump_Flip) + 
+  scale_color_manual(values = c(my.colors2[c(3, 4, 1)], 'black')) + 
+  coord_capped_cart(bottom = 'both', left = 'both', ylim = c(-1, 1.5)) +
+  scale_y_continuous(breaks = seq(-1, 1.5, 0.5)) +
+  th + theme(axis.text.x = element_text(angle = 45, hjust = 0.95), legend.position = 'none') 
+print(combine)
+  
+
+```
+
+
+```{r}
+
+```
+
+
+

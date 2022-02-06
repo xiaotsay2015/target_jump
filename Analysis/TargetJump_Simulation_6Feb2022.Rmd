@@ -1,0 +1,252 @@
+---
+title: "Target Jump model simulation"
+output: html_notebook
+---
+
+
+Load in Libraries
+```{r}
+rm(list = ls())
+source("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/TargetJumpModels.R")
+
+# define ggplot theme 
+call_aesthethics <- function(text_size){
+  
+  th <- theme(   panel.grid.major = element_blank(),
+                 panel.grid.minor = element_blank(),
+                 panel.border = element_blank(),
+                 panel.background = element_blank(),
+                 axis.line = element_line(size = 0.5), 
+                 legend.position = 'right', 
+                 legend.text = element_text(size= text_size, family="Helvetica"),
+                 text = element_text(size= text_size, family="Helvetica"), 
+                 strip.text.x = element_text(size = rel(0.90)), 
+                 strip.text.y = element_text(size = rel(0.90)), 
+                 axis.title.x = element_text(vjust=-0.3), 
+                 plot.title = element_text(hjust = 0.5, vjust = 0), 
+                 axis.ticks = element_line(size = 0.4), 
+                 axis.text.x.bottom  = element_text(size = rel(0.90), margin = unit(c(t = 2.5, r = 0, b = 0, l = 0), "mm")),
+                 axis.title.y = element_text(vjust = 1),
+                 axis.text.y = element_text(size = rel(0.90), margin = unit(c(t = 0, r = 2.5, b = 0, l = 0), "mm")),
+                 axis.ticks.length = unit(-1.2, "mm"),
+                 axis.text.x.top = element_text(size = rel(0.90), margin = unit(c(t = 0, r = 0, b = 2.5, l = 0), "mm")))
+  
+  return(th)
+}
+
+library(tidyverse)
+library(lmerTest)
+library(pracma)
+library(lemon)
+library(plotrix)
+library(car)
+
+text_size <- 18
+th <- call_aesthethics(text_size)
+my.colors2 <-  c("#006600", "#800080", "#FF9900", 'deepskyblue4')
+
+```
+
+All Parameters
+```{r}
+
+# All
+
+all_jump_dist <- seq(-180, 180, 0.1)
+my_columns <- c('JumpDistance', 'DeltaHand', 'TE', 'JumpHand', 'SPEonly')
+
+# SPE Only
+
+my_spe_only <- 1.0
+
+# SPE Disrupt Gaussian
+my_sd <- 10
+my_error <- 0
+my_jump_cost <- 0.2
+my_jump_amplitude <- my_spe_only - my_jump_cost
+
+# TE Sat
+mysatdist <- 5
+mynegsat <- -12
+
+my_slope <- 0.04
+my_intercept <- my_slope * 3                                                               
+
+```
+
+SPE only/undisrupted model 
+```{r}
+
+my_tgteffect <- setNames ( data.frame(matrix(NaN, ncol = length(my_columns), nrow = length(all_jump_dist) )), my_columns)
+my_tgteffect$JumpDistance <- all_jump_dist
+my_tgteffect$DeltaHand <- my_spe_only
+my_tgteffect$ExpHand[my_tgteffect$JumpDistance %in% c(-17, -10, -7, -3, 3, 10)] <- my_tgteffect$DeltaHand[my_tgteffect$JumpDistance %in% c(-17, -10,-7, -3, 3, 10) ]
+my_tgteffect$ExpHand[my_tgteffect$JumpDistanc == 0 ] <- 1
+
+SPEonly <- my_tgteffect %>%
+  filter( abs(JumpDistance) <= 17) %>%
+  ggplot(aes(x = JumpDistance, y = DeltaHand )) + 
+  annotate('segment', x = c(-17, 0), xend = c(17, 0), y = c(0, 1.5), yend = c(0, -0.5), color = c('lightgrey', 'lightgrey'), linetype = 'dashed') + 
+  geom_line(color = 'red', size = 0.75) + 
+  geom_point( color = 'red', aes(x = 0, y = 1), size = 4, shape = 10) +
+  labs(x = ' ', y = expression(paste(Delta, " Hand Angle (°)")) ) + 
+  scale_x_continuous(breaks = c(-17, 0, 17) , labels = c('Jump Past', 'No Jump', 'Jump Away') ) + 
+  scale_y_continuous(breaks = c(1.5, 0, -0.5) , labels = c('+', '0', '-')) + 
+  coord_capped_cart(bottom = 'both', left = 'both', xlim = c(-20, 20), ylim = c(-0.5, 1.5) ) +
+  th+ theme(axis.text.x = element_text(angle = 45, hjust = 0.95)) 
+print(SPEonly)
+
+```
+
+
+SPE Only/Disrupted model 
+```{r}
+
+my_tgteffect <- setNames ( data.frame(matrix(NaN, ncol = length(my_columns), nrow = length(all_jump_dist) )), my_columns)
+my_tgteffect$JumpDistance <- all_jump_dist
+my_tgteffect$JumpHand <- my_jump_amplitude * exp( - (all_jump_dist - my_error)^2 / (2 * my_sd^2)  )
+my_tgteffect$DeltaHand <- my_tgteffect$JumpHand
+
+SPEdisrupt <- my_tgteffect %>%
+  filter( abs(JumpDistance) <= 17) %>%
+  ggplot(aes(x = JumpDistance, y = DeltaHand )) + 
+  annotate('segment', x = c(-17, 0), xend = c(17, 0), y = c(0, 1.5), yend = c(0, -0.5), color = c('lightgrey', 'lightgrey'), linetype = 'dashed') + 
+  geom_line(size = 1, color = 'red') + 
+  geom_point( color = 'red', aes(x = 0, y = 1+0.15),  size = 4, shape = 10) + 
+  labs(x = '', y = expression(paste(Delta, " Hand Angle (°)")) ) + 
+  scale_x_continuous(breaks = c(-17,  0, 17) , labels = c('Jump Past', 'No Jump', 'Jump Away') ) + 
+  scale_y_continuous(breaks = c(1.5, 0, -0.5) , labels = c('+', '0', '-')) + 
+  coord_capped_cart(bottom = 'both', left = 'both', xlim = c(-20, 20), ylim = c(-0.5, 1.5) ) +
+  th+ theme(axis.text.x = element_text(angle = 45, hjust = 0.95)) 
+print(SPEdisrupt)
+
+```
+
+
+SPE Undisrupted TE linear
+```{r}
+
+# TE Linear 
+my_tgteffect <- setNames ( data.frame(matrix(NaN, ncol = length(my_columns), nrow = length(all_jump_dist) )), my_columns)
+my_tgteffect$JumpDistance <- all_jump_dist
+my_tgteffect$SPEonly <- 1
+my_tgteffect$TE <- my_intercept + my_slope * all_jump_dist
+my_tgteffect$DeltaHand <- my_tgteffect$SPEonly + my_tgteffect$TE
+
+SPETElinear <- my_tgteffect %>%
+  filter( abs(JumpDistance) <= 17) %>%
+  ggplot(aes(x = JumpDistance, y = DeltaHand )) + 
+  annotate('segment', x = c(-17, 0), xend = c(17, 0), y = c(0, 1.5), yend = c(0, -0.5), color = c('lightgrey', 'lightgrey'), linetype = 'dashed') + 
+  geom_line(color = 'red', size = 0.75) + 
+  geom_line(color = 'darkgrey', size = 0.75, aes( x = JumpDistance, y = SPEonly )) + 
+  geom_line(color = 'black', size = 0.75, aes( x = JumpDistance, y = TE )) + 
+  geom_point( color = 'red', aes(x = 0, y = 1 + my_intercept),  size = 4, shape = 10 ) +
+  labs(x = ' ', y = expression(paste(Delta, " Hand Angle (°)")) ) + 
+  scale_x_continuous(breaks = c(-17, 0, 17) , labels = c('Jump Past', 'No Jump', 'Jump Away') ) + 
+  scale_y_continuous(breaks = c(1.5, 0, -0.5) , labels = c('+', '0', '-') ) + 
+  coord_capped_cart(bottom = 'both', left = 'both', xlim = c(-20, 20), ylim = c(-0.5, 1.5)) +
+  th + theme(axis.text.x = element_text(angle = 45, hjust = 0.95)) 
+print(SPETElinear)
+
+```
+
+SPE Disrupted TE linear
+```{r}
+
+my_tgteffect <- setNames ( data.frame(matrix(NaN, ncol = length(my_columns), nrow = length(all_jump_dist) )), my_columns)
+my_tgteffect$JumpDistance <- all_jump_dist
+my_tgteffect$SPEonly <- my_jump_amplitude * exp( - (all_jump_dist - my_error)^2 / (2 * my_sd^2)  )
+my_tgteffect$TE <- my_intercept + my_slope * all_jump_dist
+my_tgteffect$DeltaHand <- my_tgteffect$SPEonly + my_tgteffect$TE
+
+SPEDisuprtTElinear <- my_tgteffect %>%
+  filter( abs(JumpDistance) <= 17) %>%
+  ggplot(aes(x = JumpDistance, y = DeltaHand )) + 
+  annotate('segment', x = c(-17, 0), xend = c(17, 0), y = c(0, 1.5), yend = c(0, -0.5), color = c('lightgrey', 'lightgrey'), linetype = 'dashed') + 
+  geom_line(color = 'red', size = 0.75) + 
+  geom_line(color = 'darkgrey', size = 0.75, aes( x = JumpDistance, y = SPEonly )) + 
+  geom_line(color = 'black', size = 0.75, aes( x = JumpDistance, y = TE )) + 
+  geom_point( color = 'red', aes(x = 0, y = 1 + my_intercept),  size = 4, shape = 10 ) +
+  labs(x = ' ', y = expression(paste(Delta, " Hand Angle (°)")) ) + 
+  scale_x_continuous(breaks = c(-17, 0, 17) , labels = c('Jump Past', 'No Jump', 'Jump Away') ) + 
+  scale_y_continuous(breaks = c(1.5, 0, -0.5) , labels = c('+', '0', '-')) + 
+  coord_capped_cart(bottom = 'both', left = 'both', xlim = c(-20, 20), ylim = c(-0.5, 1.5) ) +
+  th+ theme(axis.text.x = element_text(angle = 45, hjust = 0.95)) 
+print(SPEDisuprtTElinear)
+
+```
+
+Add New Column
+SPE Adaptation Modulation 
+```{r}
+
+adapt_sd <-  1
+adapt_mean <- -3
+adapt_amp <- 0.5
+  
+my_tgteffect <- setNames ( data.frame(matrix(NaN, ncol = length(my_columns), nrow = length(all_jump_dist) )), my_columns)
+my_tgteffect$JumpDistance <- all_jump_dist
+my_tgteffect$DeltaHand <- 1 - adapt_amp * exp( - (all_jump_dist - adapt_mean)^2 / (2 * adapt_sd ^2)  ) 
+
+SPEAdapt <- my_tgteffect %>%
+  filter( abs(JumpDistance) <= 17) %>%
+  ggplot(aes(x = JumpDistance, y = DeltaHand )) + 
+  annotate('segment', x = c(-17, 0), xend = c(17, 0), y = c(0, 1.5), yend = c(0, -0.5), color = c('lightgrey', 'lightgrey'), linetype = 'dashed') + 
+  geom_line(color = 'red', size = 0.75) + 
+  geom_point( color = 'red', aes(x = 0, y = 1),  size = 4, shape = 10) +
+  labs(x = ' ', y = expression(paste(Delta, " Hand Angle (°)")) ) + 
+  scale_x_continuous(breaks = c(-17, 0, 17) , labels = c('Jump Past', 'No Jump', 'Jump Away') ) + 
+  scale_y_continuous(breaks = c(1.5, 0, -0.5) , labels = c('+', '0', '-')) + 
+  coord_capped_cart(bottom = 'both', left = 'both', xlim = c(-20, 20), ylim = c(-0.5, 1.5) ) +
+  th+ theme(axis.text.x = element_text(angle = 45, hjust = 0.95)) 
+print(SPEAdapt)
+
+```
+
+
+SPE Adaptation Model + Linear TE
+```{r}
+
+my_tgteffect <- setNames ( data.frame(matrix(NaN, ncol = length(my_columns), nrow = length(all_jump_dist) )), my_columns)
+my_tgteffect$JumpDistance <- all_jump_dist
+my_tgteffect$SPEonly <-  1 - adapt_amp * exp( - (all_jump_dist - adapt_mean)^2 / (2 * adapt_sd ^2)  ) 
+my_tgteffect$TE <-   (my_intercept + my_slope * all_jump_dist)
+my_tgteffect$DeltaHand <- my_tgteffect$SPEonly + my_tgteffect$TE
+
+SPEAdaptLinear <- my_tgteffect %>%
+  filter( abs(JumpDistance) <= 17) %>%
+  ggplot(aes(x = JumpDistance, y = DeltaHand )) + 
+  annotate('segment', x = c(-17, 0), xend = c(17, 0), y = c(0, 1.5), yend = c(0, -0.5), color = c('lightgrey', 'lightgrey'), linetype = 'dashed') + 
+  geom_line(size = 1, color = 'red') + 
+  geom_line(color = 'darkgrey', size = 0.75, aes( x = JumpDistance, y = SPEonly )) + 
+  geom_line(color = 'black', size = 0.75, aes( x = JumpDistance, y = TE )) + 
+  geom_point( color = 'red', aes(x = 0, y = 1.11),  size = 4, shape = 10 ) + 
+  labs(x = ' ', y = expression(paste(Delta, " Hand Angle (°)")) ) + 
+  scale_x_continuous(breaks = c(-17, 0, 17) , labels = c('Jump Past', 'No Jump', 'Jump Away') ) + 
+  scale_y_continuous(breaks = c(1.5, 0, -0.5) , labels = c('+', '0', '-')) + 
+  coord_capped_cart(bottom = 'both', left = 'both', xlim = c(-20, 20), ylim = c(-0.5, 1.5) ) +
+  th+ theme(axis.text.x = element_text(angle = 45, hjust = 0.95)) 
+print(SPEAdaptLinear)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

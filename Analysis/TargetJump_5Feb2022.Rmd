@@ -1,0 +1,411 @@
+---
+title: "Target Jump Paper"
+output: html_notebook
+---
+
+Load in Libraries
+```{r message=FALSE}
+
+rm(list = ls())
+
+# define ggplot theme 
+call_aesthethics <- function(text_size){
+  
+  th <- theme(   panel.grid.major = element_blank(),
+                 panel.grid.minor = element_blank(),
+                 panel.border = element_blank(),
+                 panel.background = element_blank(),
+                 axis.line = element_line(size = 0.5), 
+                 legend.position = 'right', 
+                 legend.text = element_text(size= text_size, family="Helvetica"),
+                 text = element_text(size= text_size, family="Helvetica"), 
+                 strip.text.x = element_text(size = rel(0.90)), 
+                 strip.text.y = element_text(size = rel(0.90)), 
+                 axis.title.x = element_text(vjust=-0.3), 
+                 plot.title = element_text(hjust = 0.5, vjust = 0), 
+                 axis.ticks = element_line(size = 0.4), 
+                 axis.text.x.bottom  = element_text(size = rel(0.90), margin = unit(c(t = 2.5, r = 0, b = 0, l = 0), "mm")),
+                 axis.title.y = element_text(vjust = 1),
+                 axis.text.y = element_text(size = rel(0.90), margin = unit(c(t = 0, r = 2.5, b = 0, l = 0), "mm")),
+                 axis.ticks.length = unit(-1.2, "mm"),
+                 axis.text.x.top = element_text(size = rel(0.90), margin = unit(c(t = 0, r = 0, b = 2.5, l = 0), "mm")))
+  
+  return(th)
+}
+
+library(tidyverse)
+library(lmerTest)
+library(pracma)
+library(lemon)
+library(plotrix)
+library(car)
+
+text_size <- 18
+th <- call_aesthethics(text_size)
+my.colors2 <-  c("#006600", "#800080", "#FF9900", 'deepskyblue4')
+
+```
+
+
+```{r}
+
+TE_SPE_data <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/TE_SPE_data_5Feb2022.csv")
+TargetJumpClamp <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/TargetJumpClamp_data_5Feb2022.csv")
+ControlJump <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/ControlJump_data_5Feb2022.csv")
+ConsistJump <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/ConsistJump_5Feb2022.csv")
+discretejump_pro <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/discretejump_5Feb2022.csv")
+parajump_pro <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/parajump_5Feb2022.csv")
+parajump_pro <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/parajump_5Feb2022.csv")
+nojumpcontrol.data <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/NoFB_TJ_Control.csv")
+
+```
+
+
+```{r}
+
+TESPEClampInd <- TE_SPE_data %>% drop_na() %>%
+  group_by(SN, tgt_jump_size, clamp_size) %>%
+  dplyr::summarise(HandDiff_avg = median(Hand_Diff, na.rm = TRUE) ) 
+
+TESPEClamp <- TESPEClampInd %>%
+  filter(tgt_jump_size == 0) %>%
+  ggplot(aes(x =  clamp_size, y = HandDiff_avg)) +
+  annotate('segment', x = c(-4, 0), xend = c(4, 0), y = c(0, -4), yend = c(0, 4), color = 'darkgrey', linetype = 'solid') + 
+  geom_line(aes(group = SN), alpha = 0.15, color = 'darkorange') +
+  stat_summary(fun = 'mean', geom = 'path', color = 'darkorange', size = 1) +
+  stat_summary(fun.data = 'mean_se', geom = 'pointrange', color = 'darkorange') +
+  labs(x = 'Clamp Size (°)', y = expression(paste(Delta, " Hand Angle (°)"))) +
+  coord_capped_cart(left = 'both', bottom = 'both', ylim = c(-4,4)) +
+  scale_y_continuous(breaks = seq(-4, 4, 2) ) + 
+  scale_x_continuous(breaks = seq(-4, 4, 4) ) + 
+  th
+print(TESPEClamp)
+
+```
+
+
+```{r}
+
+TESPEJump <- TESPEClampInd %>%
+  filter(clamp_size == 0) %>%
+  ggplot(aes(x =  tgt_jump_size, y = HandDiff_avg)) +
+  geom_line(aes(group = SN), alpha = 0.15, color = 'darkblue') +
+  stat_summary(fun = 'mean', geom = 'path', color = 'darkblue', size = 1) +
+  stat_summary(fun.data = 'mean_se', geom = 'pointrange', color = 'darkblue') +
+  labs(x = 'Task Error (°)', y = expression(paste(Delta, " Hand Angle (°)"))) +
+  coord_capped_cart(left = 'both', bottom = 'both', ylim = c(-4,4)) +
+  scale_y_continuous(breaks = seq(-4, 4, 2) ) + 
+  scale_x_continuous(breaks = seq(-4, 4, 4) ) + 
+  th
+print(TESPEJump)
+
+```
+
+
+
+
+
+Control Jump
+```{r}
+
+ControlInd <- ControlJump %>% drop_na() %>%
+  group_by(SN, tgt_jump_size, clamp_size) %>%
+  dplyr::summarise(HandDiff_avg = median(Hand_Diff, na.rm = TRUE) ) 
+
+ControlIndPlot <- ControlInd %>%
+  filter(tgt_jump_size == 0) %>%
+  ggplot(aes(x =  clamp_size, y = HandDiff_avg)) +
+  geom_line(aes(group = SN), alpha = 0.15, color = 'darkorange') +
+  stat_summary(fun = 'mean', geom = 'path', color = 'darkorange', size = 1) +
+  stat_summary(fun.data = 'mean_se', geom = 'pointrange', color = 'darkorange') +
+  labs(x = 'Clamp Size (°)', y = expression(paste(Delta, " Hand Angle (°)"))) +
+  coord_capped_cart(left = 'both', bottom = 'both', ylim = c(-4,4)) +
+  scale_y_continuous(breaks = seq(-4, 4, 2) ) + 
+  scale_x_continuous(breaks = seq(-4, 4, 4) ) + 
+  th
+print(ControlIndPlot)
+
+
+```
+
+```{r}
+
+ControlInd_Jump <- ControlInd %>%
+  filter(clamp_size == 0) %>%
+  ggplot(aes(x =  tgt_jump_size, y = HandDiff_avg)) +
+  geom_line(aes(group = SN), alpha = 0.15, color = 'darkblue') +
+  stat_summary(fun = 'mean', geom = 'path', color = 'darkblue', size = 1) +
+  stat_summary(fun.data = 'mean_se', geom = 'pointrange', color = 'darkblue') +
+  labs(x = 'Task Error (°)', y = expression(paste(Delta, " Hand Angle (°)"))) +
+  coord_capped_cart(left = 'both', bottom = 'both', ylim = c(-4,4)) +
+  scale_x_continuous(breaks = c(-8, 0, 8) ) + 
+  scale_y_continuous(breaks = seq(-4, 4, 2)) + 
+  th
+print(ControlInd_Jump)
+
+
+```
+
+
+
+```{r}
+
+TargetJumpInd <- TargetJumpClamp %>% drop_na() %>%
+  group_by(SN, tgt_jump_size, clamp_size) %>%
+  dplyr::summarise(HandDiff_avg = median(Hand_Diff, na.rm = TRUE) ) 
+
+TargetJumpClampplot <- TargetJumpInd %>%
+  filter(tgt_jump_size == 0) %>%
+  ggplot(aes(x =  clamp_size, y = HandDiff_avg)) +
+  geom_line(aes(group = SN), alpha = 0.15, color = 'darkorange') +
+  stat_summary(fun = 'mean', geom = 'path', color = 'darkorange', size = 1) +
+  stat_summary(fun.data = 'mean_se', geom = 'pointrange', color = 'darkorange') +
+  labs(x = 'Clamp Size (°)', y = expression(paste(Delta, " Hand Angle (°)"))) +
+  coord_capped_cart(left = 'both', bottom = 'both', ylim = c(-4,4)) +
+  scale_y_continuous(breaks = seq(-4, 4, 2)) + 
+  scale_x_continuous(breaks = c(-16, -4, 0, 4, 16) ) + 
+  th
+print(TargetJumpClampplot)
+
+```
+
+```{r}
+
+TargetJumpJump <- TargetJumpInd %>%
+  filter(clamp_size == 0) %>%
+  ggplot(aes(x =  tgt_jump_size, y = HandDiff_avg)) +
+  geom_line(aes(group = SN), alpha = 0.15, color = 'darkblue') +
+  stat_summary(fun = 'mean', geom = 'path', color = 'darkblue', size = 1) +
+  stat_summary(fun.data = 'mean_se', geom = 'pointrange', color = 'darkblue') +
+  labs(x = 'Task Error (°)', y = expression(paste(Delta, " Hand Angle (°)"))) +
+  coord_capped_cart(left = 'both', bottom = 'both', ylim = c(-4,4)) +
+  scale_x_continuous(breaks = c(-16, -4, 0, 4, 16) ) + 
+  scale_y_continuous(breaks = seq(-4, 4, 2)) + 
+  th
+print(TargetJumpJump)
+
+```
+
+```{r}
+
+# block design
+TargetJumpInd4d <- TargetJumpInd %>% 
+  filter(clamp_size == 4 | clamp_size == -4) %>% 
+  mutate(HandFlip = ifelse(clamp_size == 4, -HandDiff_avg, HandDiff_avg)) %>%
+  group_by(SN) %>% 
+  dplyr::summarise(Hand_mean = mean(HandFlip))
+
+TESPEClampInd4d <- TESPEClampInd %>% 
+  filter(tgt_jump_size == 0) %>%
+  filter(clamp_size == 4 | clamp_size == -4) %>% 
+  mutate(HandFlip = ifelse(clamp_size == 4, -HandDiff_avg, HandDiff_avg)) %>%
+  group_by(SN) %>% 
+  dplyr::summarise(Hand_mean = mean(HandFlip))
+
+```
+
+
+Exp 2 
+```{r}
+
+TargetJumpInd2_sum <- rbind(TE_SPE_data, ControlJump %>% mutate(SN = SN + length(unique(TE_SPE_data$SN)) )) %>%
+  mutate(Hand_Diff_Flip = ifelse(clamp_size > 0, -Hand_Diff, Hand_Diff ), 
+         Set = ifelse(SN <= 20, 'A', 'B')) %>% # flip + clamp hand angles
+  mutate(jump_tag = case_when(clamp_size == 4 & tgt_jump_size == 4 ~ 'Jump To  -4°', 
+                              clamp_size == -4 & tgt_jump_size == -4 ~ 'Jump To  -4°',
+                              clamp_size == -4 & tgt_jump_size == 8 ~ 'Jump Away  8°', 
+                              clamp_size == 4 & tgt_jump_size == -8 ~ 'Jump Away  8°',
+                              clamp_size == 4 & tgt_jump_size == 8 ~ 'Jump Past  -8°', 
+                              clamp_size == -4 & tgt_jump_size == -8 ~ 'Jump Past  -8°', 
+                              (clamp_size == 4 | clamp_size == -4)& tgt_jump_size == 0 ~ 'No Jump  0°') ) %>% 
+  mutate(jump = ifelse(jump_tag == 'No Jump  0°', 0, 1)) %>% 
+  group_by(SN, jump_tag, Set, jump) %>%
+  dplyr::summarise(Hand_Diff_Avg = median(Hand_Diff_Flip, na.rm = TRUE) ) %>%
+  drop_na() 
+
+
+TargetJumpInd2_sum$jump_tag <- factor(TargetJumpInd2_sum$jump_tag, levels = c('Jump Past  -8°', 'Jump To  -4°', 'No Jump  0°', 'Jump Away  8°') )  
+TargetJumpInd2_sum$jump_tag_num <- as.numeric(TargetJumpInd2_sum$jump_tag)
+
+discrete4d <- TargetJumpInd2_sum %>% 
+  mutate(addline = 1, 
+         jump_tag_2 = ifelse(jump_tag_num == 4, 5, jump_tag_num)) %>%
+  ggplot(aes(x = jump_tag_2, y = Hand_Diff_Avg)) + 
+  stat_summary(fun = 'mean', geom = 'line',  position = position_dodge(0.13), inherit.aes = FALSE, 
+               aes(x = jump_tag_2, y = Hand_Diff_Avg, group = addline), color = 'darkgreen') +
+  stat_summary(fun.data = 'mean_se', geom = 'pointrange', position = position_dodge(0.13), color = 'darkgreen') +
+  labs(x = ' ', y = expression(paste(Delta, " Hand Angle (°)")), color = '') + 
+  th + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 0.95) ) +
+  scale_y_continuous( breaks = seq(0, 1.8, 0.3) ) +
+  scale_x_continuous(labels = c('Jump Past  -8°', 'Jump To  -4°', 'No Jump  0°', '','Jump Away  8°')) + 
+  coord_capped_cart(bottom = 'both', left = 'both', ylim = c(-0.1, 1.8))
+print(discrete4d)
+
+
+```
+
+```{r}
+
+discrete_sum <- discretejump_pro %>%
+  filter(clamp_size %in% c(7, -7, 3, -3)) %>% # keep only clamp trials, angular jumps 
+  mutate(Hand_Diff_Flip = ifelse(clamp_size > 0, -Hand_Diff, Hand_Diff ) ) %>% # flip + clamp hand angles
+  mutate(jump_tag = case_when(clamp_size == 7 & tgt_jump_size == 3 ~ 'Jump To  -3°', 
+                              clamp_size == -7 & tgt_jump_size == -3 ~ 'Jump To  -3°',
+                              clamp_size == -7 & tgt_jump_size == 3 ~ 'Jump Away  3°', 
+                              clamp_size == 7 & tgt_jump_size == -3 ~ 'Jump Away  3°',
+                              clamp_size == 3 & tgt_jump_size == 3 ~ 'Jump To  -3°', 
+                              clamp_size == -3 & tgt_jump_size == -3 ~ 'Jump To  -3°',
+                              clamp_size == -3 & tgt_jump_size == 3 ~ 'Jump Away  3°', 
+                              clamp_size == 3 & tgt_jump_size == -3 ~ 'Jump Away  3°',
+                              tgt_jump_size == 1 ~ "Jump in Place  0°", 
+                              tgt_jump_size == 0 ~ "No Jump  0°") ) %>%
+  group_by(SN, jump_tag, Exp) %>%
+  dplyr::summarise(Hand_Diff_Avg = median(Hand_Diff_Flip, na.rm = TRUE) ) 
+
+discrete_sum$jump_tag <- factor(discrete_sum$jump_tag, levels = c('Jump To  -3°',  'Jump in Place  0°', 'No Jump  0°', 'Jump Away  3°') )
+
+discrete_sum <- discrete_sum %>%
+  mutate(JumpInPlace = ifelse(jump_tag == 'Jump in Place  0°', 1, 0),
+         newJumptag = ifelse(JumpInPlace == 1, 'No Jump  0°', as.character(jump_tag)) )
+
+discrete_sum$newJumptag <- factor(discrete_sum$newJumptag, levels = c('Jump To  -3°',  'No Jump  0°', 'Jump Away  3°') )
+
+discrete7d <- discrete_sum %>% mutate(addline = 1) %>%
+  filter(Exp == '7d_discrete' & jump_tag !=  'Jump in Place  0°') %>%
+  ggplot(aes(x = jump_tag, y = Hand_Diff_Avg, group = Exp, color = Exp)) + 
+  stat_summary(fun = 'mean', geom = 'line',  position = position_dodge(0.13), inherit.aes = FALSE, 
+               aes(x = jump_tag, y = Hand_Diff_Avg, group = addline), color = my.colors2[4]) +
+  stat_summary(fun.data = 'mean_se', geom = 'pointrange', position = position_dodge(0.13), color = my.colors2[4]) +
+  stat_summary(inherit.aes = FALSE, data = discrete_sum[discrete_sum$jump_tag == 'Jump in Place  0°' & discrete_sum$Exp == '7d_discrete', ], fun.data = 'mean_se', geom = 'pointrange', color = 'red', aes(x = newJumptag, y = Hand_Diff_Avg) ) +
+  labs(x = ' ', y = expression(paste(Delta, " Hand Angle (°)")), color = '') + 
+  th + theme(axis.text.x = element_text(angle = 45, hjust = 0.95) )+
+  scale_y_continuous( breaks = seq(0, 1.8, 0.3) ) + 
+  coord_capped_cart(bottom = 'both', left = 'both', ylim = c(-0.1, 1.8))
+print(discrete7d)
+
+
+```
+
+```{r}
+
+discrete3d <- discrete_sum %>%  mutate(addline = 1) %>%
+  filter(Exp == '3d_discrete' & jump_tag !=  'Jump in Place  0°') %>%
+  ggplot(aes(x = jump_tag, y = Hand_Diff_Avg)) + 
+  stat_summary(fun = 'mean', geom = 'line',  position = position_dodge(0.13), inherit.aes = FALSE, 
+               aes(x = jump_tag, y = Hand_Diff_Avg, group = addline), color = my.colors2[3]) +
+  stat_summary(fun.data = 'mean_se', geom = 'pointrange', position = position_dodge(0.13), color =  my.colors2[3]) +
+  stat_summary(inherit.aes = FALSE, data = discrete_sum[discrete_sum$jump_tag == 'Jump in Place  0°' & discrete_sum$Exp == '3d_discrete', ], fun.data = 'mean_se', geom = 'pointrange', aes(x = newJumptag, y = Hand_Diff_Avg), color = 'red' ) +
+  labs(x = ' ', y = expression(paste(Delta, " Hand Angle (°)")), color = '') + 
+  th + theme(axis.text.x = element_text(angle = 45, hjust = 0.95) )+
+  scale_y_continuous( breaks = seq(0, 1.8, 0.3) ) + 
+  coord_capped_cart(bottom = 'both', left = 'both', ylim = c(-0.1, 1.8))
+print(discrete3d)
+
+```
+
+
+```{r}
+
+parasum <- parajump_pro %>%
+  filter(abs(clamp_size) > 0) %>% # keep only clamp trials, angular jumps 
+  mutate(Hand_Diff_Flip = ifelse(clamp_size > 0, -Hand_Diff, Hand_Diff ) ) %>% # flip + clamp hand angles
+  mutate(tgtjump_Flip = ifelse(clamp_size > 0, -tgt_jump_size, tgt_jump_size ) ) %>%
+  mutate(tgtjump_Flip = ifelse(abs(tgtjump_Flip) == 1, 1, tgtjump_Flip ) ) %>%
+  mutate(clamp_size = abs(clamp_size)) %>%
+  mutate(jump_tag = case_when(clamp_size == 7 & (tgt_jump_size == 3 | tgt_jump_size == 7) ~ 'Jump To', 
+                              clamp_size == -7 & (tgt_jump_size == -3 | tgt_jump_size == -7) ~ 'Jump To',
+                              (clamp_size == -7 |  clamp_size == -3)  & tgt_jump_size >= 3 ~ 'Jump Away', 
+                              (clamp_size == 7 | clamp_size == 3 ) & tgt_jump_size <= -3 ~ 'Jump Away',
+                              (clamp_size == -7 |  clamp_size == -3)  & tgt_jump_size <= -10 ~ 'Jump Past',
+                              (clamp_size == 7 |  clamp_size == 3)  & tgt_jump_size>= 10 ~ 'Jump Past',
+                              tgt_jump_size == 0 ~ "No Jump") ) %>%
+  group_by(SN, clamp_size, jump_tag, tgtjump_Flip) %>%
+  dplyr::summarise(Hand_Diff_Avg = median(Hand_Diff_Flip, na.rm = TRUE) ) 
+
+parasum %>%
+  ggplot(aes(x = tgtjump_Flip, y = Hand_Diff_Avg, color = factor(clamp_size))) + 
+  annotate(alpha = 0.8, 'segment', x = c(0,-30), xend = c(0, 30), y = c(-1, 0), yend = c(3, 0), linetype = 'dashed', color = rep('grey', 2)) +
+  stat_summary(fun.data = 'mean_se', geom = 'pointrange', size = 0.3, alpha = 1) +
+  labs(x = '', y = expression(paste(Delta, " Hand Angle (°)")), color = '') + 
+  scale_x_continuous(breaks = unique(parasum$tgtjump_Flip)) + 
+  scale_color_manual(values = c(my.colors2[c(3, 4, 1, 2)], 'black' )) + 
+  scale_y_continuous(breaks = seq(-1, 2, 0.5)) +
+  coord_capped_cart(bottom = 'both', left = 'both', ylim = c(-1, 1.5) ) +
+  th + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 0.95,)) 
+
+
+```
+
+
+```{r}
+
+kimleow <- read.csv('~/Dropbox/VICE/JT/KIM_TARGET_JUMP/OrganizedData/past_TE_data.csv',header=TRUE, sep=",") 
+kimleow$Group <- factor(kimleow$Group, levels = c('SPE+TE', 'SPE-only'))
+
+
+leow_2018plot <- kimleow %>%
+  filter(Exp == 'Leow_2018') %>%
+  group_by(Group) %>% 
+  dplyr::summarise(after_mean = mean(Aftereffects, na.rm = TRUE), 
+                   after_se = std.error(Aftereffects, na.rm = TRUE)) %>%
+  ggplot(aes(x = Group, y = after_mean, fill = Group)) + 
+  geom_bar(stat = 'identity') + 
+  #geom_errorbar(aes(ymin = after_mean - after_se, ymax = after_mean + after_se), width = 0.1) + 
+  labs(x = '', y = 'Aftereffect (°)') +
+  coord_capped_cart(left = 'both', ylim = c(0, 30)) +
+  scale_fill_manual(values = c('darkorange', 'darkgreen')) + 
+  th + theme(axis.line.x = element_blank(), axis.ticks.x = element_blank(), axis.text.x.bottom  = element_blank(), legend.position = 'none')
+print(leow_2018plot)
+
+kim2019plot <- kimleow %>%
+  filter(Exp == 'Kim_2019') %>%
+  group_by(Group) %>% 
+  dplyr::summarise(after_mean = mean(Aftereffects, na.rm = TRUE), 
+                   after_se = std.error(Aftereffects, na.rm = TRUE)) %>%
+  ggplot(aes(x = Group, y = after_mean, fill = Group)) + 
+  geom_bar(stat = 'identity') + 
+  #geom_errorbar(aes(ymin = after_mean - after_se, ymax = after_mean + after_se), width = 0.1) + 
+  labs(x = '', y = 'Asymptote (°)') +
+  scale_fill_manual(values = c('darkorange', 'darkgreen')) + 
+  coord_capped_cart(left = 'both', ylim = c(0, 30)) +
+  th + theme(axis.line.x = element_blank(), axis.ticks.x = element_blank(), axis.text.x.bottom  = element_blank(), legend.position = 'none')
+print(kim2019plot)
+
+```
+
+
+
+```{r}
+
+clampnofb <- nojumpcontrol.data %>% 
+  filter(TN >= 21 & Cursor.FB == "clamped_fb") %>%
+  group_by(SN, Rotation) %>%
+  dplyr::summarise(Hand_diff_avg = median(Hand_Diff, na.rm = TRUE)) %>% 
+  ggplot(aes(x = Rotation, y = Hand_diff_avg)) +
+  stat_summary(fun.data = "mean_se", geom = "pointrange", color = "darkorange") + 
+  stat_summary(fun = "mean", geom = "line", color = "darkorange") + 
+  scale_x_continuous(breaks = c(-16, 16, -4, 4, 0)) +
+  labs(x = 'Clamp Size (°)', y = expression(paste(Delta, " Hand Angle (°)"))) +
+  scale_y_continuous(breaks = seq(-4, 4, 2)) + 
+  coord_capped_cart(ylim = c(-4, 4)) +
+  th
+print(clampnofb)
+
+tjnofb <- nojumpcontrol.data %>% 
+  filter(TN >= 21 & Cursor.FB == "no_fb" ) %>%
+  group_by(SN, targetjump) %>%
+  dplyr::summarise(Hand_diff_avg = median(Hand_Diff, na.rm = TRUE)) %>% 
+  ggplot(aes(x = -targetjump, y = Hand_diff_avg)) + 
+  scale_x_continuous(breaks = c(-16, 16, -4, 4, 0)) +
+  stat_summary(fun.data = "mean_se", geom = "pointrange", color = "darkblue") + 
+  stat_summary(fun = "mean", geom = "line", color = "darkblue") +
+  scale_y_continuous(breaks = seq(-4, 4, 2)) + 
+  coord_capped_cart(ylim = c(-4, 4)) +
+  labs(x = 'Task Error (°)', y = expression(paste(Delta, " Hand Angle (°)"))) +
+  th
+print(tjnofb)
+
+
+```
