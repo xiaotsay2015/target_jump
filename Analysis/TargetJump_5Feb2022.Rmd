@@ -49,14 +49,13 @@ my.colors2 <-  c("#006600", "#800080", "#FF9900", 'deepskyblue4')
 
 ```{r}
 
-TE_SPE_data <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/TE_SPE_data_5Feb2022.csv")
-TargetJumpClamp <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/TargetJumpClamp_data_5Feb2022.csv")
-ControlJump <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/ControlJump_data_5Feb2022.csv")
-ConsistJump <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/ConsistJump_5Feb2022.csv")
-discretejump_pro <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/discretejump_5Feb2022.csv")
-parajump_pro <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/parajump_5Feb2022.csv")
-parajump_pro <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/parajump_5Feb2022.csv")
-nojumpcontrol.data <- read.csv("~/Dropbox/VICE/JT/KIM_TARGET_JUMP/Analysis/ForGitHub/TJ_GitHubData/NoFB_TJ_Control.csv")
+TE_SPE_data <- read.csv("~/TJ_GitHubData/TE_SPE_data_5Feb2022.csv")
+TargetJumpClamp <- read.csv("~/TJ_GitHubData/TargetJumpClamp_data_5Feb2022.csv")
+ControlJump <- read.csv("~/TJ_GitHubData/ControlJump_data_5Feb2022.csv")
+ConsistJump <- read.csv("~/TJ_GitHubData/ConsistJump_5Feb2022.csv")
+discretejump_pro <- read.csv("~/TJ_GitHubData/discretejump_5Feb2022.csv")
+parajump_pro <- read.csv("~/TJ_GitHubData/parajump_5Feb2022.csv")
+nojumpcontrol.data <- read.csv("~/TJ_GitHubData/NoFB_TJ_Control.csv")
 
 ```
 
